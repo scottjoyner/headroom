@@ -4171,6 +4171,7 @@ def create_app(config: ProxyConfig | None = None) -> FastAPI:
                 "rate_limited": m.requests_rate_limited,
                 "failed": m.requests_failed,
                 "by_provider": _remap_provider_counts(dict(m.requests_by_provider), proxy.config),
+                "by_lane": dict(m.requests_by_lane),
                 "by_model": dict(m.requests_by_model),
                 "by_stack": dict(m.requests_by_stack),
             },

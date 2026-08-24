@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from headroom.proxy.auth_mode import AuthMode
 
@@ -306,7 +306,36 @@ def is_enforcement_enabled() -> bool:
     return val not in ("disabled", "off", "false", "0", "no")
 
 
-def resolve_policy(auth_mode: AuthMode | None) -> CompressionPolicy:
+def policy_telemetry_tags(
+    policy: CompressionPolicy,
+    *,
+    auth_mode: AuthMode | None = None,
+    provider_lane: str | None = None,
+) -> dict[str, str]:
+    """Return compact tags describing the selected policy.
+
+    These tags are attached to RequestOutcome/RequestLog records so the
+    durable telemetry carries the exact policy posture used for a request.
+    """
+    tags = {
+        "compression_policy": "payg" if policy == policy_default_payg() else (
+            auth_mode.value.lower() if auth_mode is not None else "custom"
+        ),
+        "policy_live_zone_only": str(bool(policy.live_zone_only)).lower(),
+        "policy_cache_aligner_enabled": str(bool(policy.cache_aligner_enabled)).lower(),
+        "policy_toin_read_only": str(bool(policy.toin_read_only)).lower(),
+    }
+    if provider_lane:
+        tags["provider_lane"] = provider_lane
+    if auth_mode is not None:
+        tags["auth_mode"] = auth_mode.value.lower()
+    return tags
+
+
+def resolve_policy(
+    auth_mode: AuthMode | None,
+    provider_lane: str | None = None,
+) -> CompressionPolicy:
     """Resolve the effective ``CompressionPolicy`` for a request.
 
     - If the enforcement flag is off, returns PAYG-equivalent
@@ -315,10 +344,17 @@ def resolve_policy(auth_mode: AuthMode | None) -> CompressionPolicy:
       returns PAYG-equivalent (defensive default for the unclassified
       / batch-row path).
     - Otherwise returns the per-mode policy.
+    - Remote upstream lanes get a conservative cache-first override
+      (live-zone-only) so remote/SaaS providers preserve prefix cache
+      stability by default.
 
     This is the single public entry point handlers should call when
     deriving the policy from a request's classification result.
     """
     if auth_mode is None or not is_enforcement_enabled():
-        return policy_default_payg()
-    return policy_for_mode(auth_mode)
+        policy = policy_default_payg()
+    else:
+        policy = policy_for_mode(auth_mode)
+    if provider_lane and provider_lane.lower() == "remote" and not policy.live_zone_only:
+        policy = replace(policy, live_zone_only=True)
+    return policy

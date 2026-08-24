@@ -51,6 +51,7 @@ class SQLiteStorage(Storage):
                     stable_prefix_hash TEXT,
                     cache_alignment_score REAL,
                     cached_tokens INTEGER,
+                    provider_lane TEXT DEFAULT 'unknown',
                     transforms_applied TEXT NOT NULL,
                     tool_units_dropped INTEGER DEFAULT 0,
                     turns_dropped INTEGER DEFAULT 0,
@@ -69,6 +70,13 @@ class SQLiteStorage(Storage):
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_mode ON requests(mode)
             """)
+
+            cursor.execute("PRAGMA table_info(requests)")
+            columns = {row[1] for row in cursor.fetchall()}
+            if "provider_lane" not in columns:
+                cursor.execute(
+                    "ALTER TABLE requests ADD COLUMN provider_lane TEXT DEFAULT 'unknown'"
+                )
 
             conn.commit()
         finally:
@@ -93,9 +101,9 @@ class SQLiteStorage(Storage):
                 tokens_input_before, tokens_input_after, tokens_output,
                 block_breakdown, waste_signals,
                 stable_prefix_hash, cache_alignment_score, cached_tokens,
-                transforms_applied, tool_units_dropped, turns_dropped,
+                provider_lane, transforms_applied, tool_units_dropped, turns_dropped,
                 messages_hash, error
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 metrics.request_id,
@@ -111,6 +119,7 @@ class SQLiteStorage(Storage):
                 metrics.stable_prefix_hash,
                 metrics.cache_alignment_score,
                 metrics.cached_tokens,
+                metrics.provider_lane,
                 json.dumps(metrics.transforms_applied),
                 metrics.tool_units_dropped,
                 metrics.turns_dropped,
@@ -239,7 +248,9 @@ class SQLiteStorage(Storage):
                 AVG(tokens_input_before - tokens_input_after) as avg_tokens_saved,
                 AVG(cache_alignment_score) as avg_cache_alignment,
                 SUM(CASE WHEN mode = 'audit' THEN 1 ELSE 0 END) as audit_count,
-                SUM(CASE WHEN mode = 'optimize' THEN 1 ELSE 0 END) as optimize_count
+                SUM(CASE WHEN mode = 'optimize' THEN 1 ELSE 0 END) as optimize_count,
+                SUM(CASE WHEN provider_lane = 'local' THEN 1 ELSE 0 END) as local_lane_count,
+                SUM(CASE WHEN provider_lane = 'remote' THEN 1 ELSE 0 END) as remote_lane_count
             FROM requests
             {where_clause}
             """,
@@ -257,6 +268,8 @@ class SQLiteStorage(Storage):
             "avg_cache_alignment": row[5] or 0,
             "audit_count": row[6] or 0,
             "optimize_count": row[7] or 0,
+            "local_lane_count": row[8] or 0,
+            "remote_lane_count": row[9] or 0,
         }
 
     def _row_to_metrics(self, row: sqlite3.Row) -> RequestMetrics:
@@ -275,6 +288,7 @@ class SQLiteStorage(Storage):
             stable_prefix_hash=row["stable_prefix_hash"] or "",
             cache_alignment_score=row["cache_alignment_score"] or 0.0,
             cached_tokens=row["cached_tokens"],
+            provider_lane=row["provider_lane"] or "unknown",
             transforms_applied=json.loads(row["transforms_applied"]),
             tool_units_dropped=row["tool_units_dropped"] or 0,
             turns_dropped=row["turns_dropped"] or 0,

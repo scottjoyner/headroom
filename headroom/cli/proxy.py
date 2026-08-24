@@ -16,7 +16,11 @@ from headroom.providers.registry import (
     resolve_api_targets,
     resolve_extra_headers,
 )
-from headroom.proxy.modes import PROXY_MODE_CACHE, normalize_proxy_mode
+from headroom.proxy.modes import (
+    classify_upstream_lane,
+    default_proxy_mode_for_upstream,
+    normalize_proxy_mode,
+)
 
 from .main import main
 
@@ -1236,6 +1240,7 @@ def proxy(
         environ=os.environ,
     )
 
+    resolved_api_targets = resolve_api_targets(provider_api_overrides)
     # Resolve anyllm provider. An explicit --anyllm-provider flag always wins;
     # otherwise honor HEADROOM_ANYLLM_PROVIDER, which the settings store may
     # have exported into os.environ after Click parsed the option (so the
@@ -1246,10 +1251,24 @@ def proxy(
     else:
         effective_anyllm_provider = os.environ.get("HEADROOM_ANYLLM_PROVIDER") or anyllm_provider
 
-    # Resolve mode: CLI flag > env var > default. Default is CACHE (Headroom's
-    # coding posture): delta-only compression at ~0 prefix-cache busts.
+    # Resolve mode: CLI flag > env var > provider-aware default.
+    # Remote/SaaS targets stay cache-first, while self-hosted/private targets
+    # default to token-first compression.
+    def _backend_target_url() -> str | None:
+        if backend == "anthropic":
+            return resolved_api_targets.anthropic
+        if backend == "anyllm" or backend.startswith("anyllm-"):
+            return resolved_api_targets.openai
+        if backend == "cloudcode":
+            return resolved_api_targets.cloudcode
+        if backend.endswith("vertex") or backend.endswith("google-vertex") or backend.endswith("googlevertex"):
+            return resolved_api_targets.vertex
+        return resolved_api_targets.openai
+
+    _backend_target = _backend_target_url()
+    _backend_lane = classify_upstream_lane(_backend_target)
     effective_mode: str = normalize_proxy_mode(
-        mode or os.environ.get("HEADROOM_MODE") or PROXY_MODE_CACHE
+        mode or os.environ.get("HEADROOM_MODE") or default_proxy_mode_for_upstream(_backend_target)
     )
 
     # Stateless mode: CLI flag or env var
@@ -1272,6 +1291,9 @@ def proxy(
         os.environ["HEADROOM_CODEX_WIRE_DEBUG_DIR"] = codex_wire_debug_dir or str(
             _paths.codex_wire_debug_dir()
         )
+
+    # Surface the chosen lane for session metadata / downstream telemetry.
+    os.environ["HEADROOM_UPSTREAM_LANE"] = _backend_lane
 
     # Stateless mode: suppress TOIN filesystem persistence
     if is_stateless:
@@ -1476,7 +1498,7 @@ def proxy(
     if license_key:
         license_status = f"MANAGED (key={license_key[:8]}...)"
 
-    provider_api_targets = resolve_api_targets(config.provider_api_overrides)
+    provider_api_targets = resolved_api_targets
     anthropic_url = provider_api_targets.anthropic
     openai_url = provider_api_targets.openai
     cloudcode_url = provider_api_targets.cloudcode
@@ -1622,6 +1644,7 @@ Starting proxy server...
 
   URL:          http://{config.host}:{config.port}
   Mode:         {config.mode}
+  Upstream:     {_backend_lane} lane ({effective_mode}-first default)
   Optimization: {"ENABLED" if config.optimize else "DISABLED"}
   Caching:      {"ENABLED" if config.cache_enabled else "DISABLED"}
   Rate Limit:   {"ENABLED" if config.rate_limit_enabled else "DISABLED"}

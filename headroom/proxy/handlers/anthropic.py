@@ -850,7 +850,7 @@ class AnthropicHandlerMixin:
             compute_turn_id,
             read_request_json_with_bytes,
         )
-        from headroom.proxy.modes import is_cache_mode, is_token_mode
+        from headroom.proxy.modes import classify_upstream_lane, is_cache_mode, is_token_mode
         from headroom.utils import extract_user_query
 
         start_time = time.time()
@@ -863,7 +863,12 @@ class AnthropicHandlerMixin:
         # without re-classifying. Pure function, well under 10us.
         auth_mode = classify_auth_mode(request.headers)
         request.state.auth_mode = auth_mode
-        logger.debug(f"[{request_id}] auth_mode_classified mode={auth_mode.value}")
+        request.state.provider_lane = classify_upstream_lane(
+            upstream_base_url or getattr(getattr(self, "config", None), "anthropic_api_url", None)
+        )
+        logger.debug(
+            f"[{request_id}] auth_mode_classified mode={auth_mode.value} lane={request.state.provider_lane}"
+        )
 
         # Unit 2: per-stage timings for the pre-upstream phase. The
         # finalizer emits one structured log line + Prometheus
@@ -1679,9 +1684,22 @@ class AnthropicHandlerMixin:
                     # policy collapses to PAYG so behaviour is unchanged.
                     # Hoisted here so all three pipeline.apply call sites
                     # (token / non-cache / cache-delta) see the same policy.
-                    from headroom.transforms.compression_policy import resolve_policy
+                    from headroom.transforms.compression_policy import (
+                        policy_telemetry_tags,
+                        resolve_policy,
+                    )
 
-                    compression_policy = resolve_policy(getattr(request.state, "auth_mode", None))
+                    compression_policy = resolve_policy(
+                        getattr(request.state, "auth_mode", None),
+                        getattr(request.state, "provider_lane", None),
+                    )
+                    tags.update(
+                        policy_telemetry_tags(
+                            compression_policy,
+                            auth_mode=getattr(request.state, "auth_mode", None),
+                            provider_lane=getattr(request.state, "provider_lane", None),
+                        )
+                    )
                     if is_token_mode(self.config.mode):
                         comp_cache = self._get_compression_cache(session_id)
 

@@ -31,6 +31,7 @@ def _metrics(
         stable_prefix_hash="prefix",
         cache_alignment_score=75.0,
         cached_tokens=12,
+        provider_lane="remote",
         transforms_applied=["compress"],
         tool_units_dropped=1,
         turns_dropped=2,
@@ -178,6 +179,8 @@ def test_jsonl_storage_round_trip_query_count_and_summary(tmp_path: Path) -> Non
         "avg_cache_alignment": 75.0,
         "audit_count": 2,
         "optimize_count": 1,
+        "local_lane_count": 0,
+        "remote_lane_count": 3,
     }
 
     storage.close()
@@ -206,6 +209,7 @@ def test_jsonl_storage_handles_missing_file_malformed_lines_and_defaults(tmp_pat
     assert loaded[0].waste_signals == {}
     assert loaded[0].stable_prefix_hash == ""
     assert loaded[0].cache_alignment_score == 0.0
+    assert loaded[0].provider_lane == "unknown"
     assert loaded[0].transforms_applied == []
     assert loaded[0].tool_units_dropped == 0
     assert loaded[0].turns_dropped == 0
@@ -259,6 +263,8 @@ def test_sqlite_storage_round_trip_filters_summary_and_defaults(tmp_path: Path) 
         "avg_cache_alignment": 50.0,
         "audit_count": 2,
         "optimize_count": 1,
+        "local_lane_count": 0,
+        "remote_lane_count": 3,
     }
 
     empty = storage.get_summary_stats(start_time=now + timedelta(days=1))

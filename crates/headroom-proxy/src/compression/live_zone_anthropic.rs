@@ -40,6 +40,7 @@
 
 use bytes::Bytes;
 use headroom_core::auth_mode::AuthMode as RequestAuthMode;
+use headroom_core::compression_policy::CompressionPolicy;
 use headroom_core::transforms::live_zone::DEFAULT_MODEL;
 use headroom_core::transforms::{
     compress_anthropic_live_zone, BlockAction, ExclusionReason, LiveZoneError, LiveZoneOutcome,
@@ -192,6 +193,19 @@ pub fn compress_anthropic_request(
     };
 
     let frozen_count = resolve_frozen_count(&parsed, cache_control_policy, request_id);
+    let policy = CompressionPolicy::for_mode(auth_mode.into());
+
+    tracing::debug!(
+        event = "policy_selected",
+        request_id = %request_id,
+        auth_mode = auth_mode.as_str(),
+        live_zone_only = policy.live_zone_only,
+        cache_aligner_enabled = policy.cache_aligner_enabled,
+        volatile_token_threshold = policy.volatile_token_threshold,
+        max_lossy_ratio = policy.max_lossy_ratio,
+        toin_read_only = policy.toin_read_only,
+        "anthropic compression policy resolved"
+    );
 
     // ── Phase E byte-mutating passes ──────────────────────────────
     //
@@ -225,13 +239,13 @@ pub fn compress_anthropic_request(
 
     // PR-E1 + PR-E2: sort tools[] and schema keys in-place on the
     // parsed value.
-    let normalization_applied = normalize_tool_definitions(&mut parsed, auth_mode, request_id);
+    let normalization_applied = normalize_tool_definitions(&mut parsed, policy, auth_mode, request_id);
 
     // PR-E3: auto-place anthropic cache_control on the last tool.
     let mut e3_locations: Vec<String> = Vec::new();
     let mut e3_applied: bool = false;
     let e3_skipped: bool;
-    if matches!(auth_mode, RequestAuthMode::Payg) {
+    if !policy.toin_read_only {
         match auto_place_anthropic_cache_control(&mut parsed) {
             AutoPlaceOutcome::Applied {
                 placed_count,
@@ -290,9 +304,10 @@ pub fn compress_anthropic_request(
             event = "e3_skipped",
             request_id = %request_id,
             path = "/v1/messages",
-            reason = SkipReason::AuthMode.as_str(),
+            reason = "policy",
             auth_mode = auth_mode.as_str(),
-            "non-PAYG auth mode; cache_control auto-placement skipped"
+            toin_read_only = policy.toin_read_only,
+            "non-writable policy; cache_control auto-placement skipped"
         );
     }
     // Suppress dead-code warnings on the local; we keep the variable
@@ -355,6 +370,17 @@ pub fn compress_anthropic_request(
     // getting compression, not losing it). The plumbing here lets
     // F2.2 vary per-block thresholds by mode without touching this
     // call site again.
+    if !policy.live_zone_compression_enabled() {
+        tracing::info!(
+            event = "live_zone_skipped",
+            request_id = %request_id,
+            path = "/v1/messages",
+            live_zone_only = policy.live_zone_only,
+            "policy disabled live-zone compression"
+        );
+        return Outcome::NoCompression;
+    }
+
     match compress_anthropic_live_zone(&dispatch_body, frozen_count, auth_mode.into(), model) {
         Ok(LiveZoneOutcome::NoChange { manifest }) => {
             let block_count = manifest.block_outcomes.len();
@@ -605,6 +631,7 @@ impl NormalizationApplied {
 /// dashboards can see how often each policy fires in production.
 pub(super) fn normalize_tool_definitions(
     parsed: &mut Value,
+    policy: CompressionPolicy,
     auth_mode: RequestAuthMode,
     request_id: &str,
 ) -> NormalizationApplied {
@@ -612,22 +639,24 @@ pub(super) fn normalize_tool_definitions(
     // bytes, which is only safe under PAYG. OAuth and Subscription
     // clients pass through byte-equal so the proxy never looks
     // like a cache-evasion intermediary to the upstream.
-    if !matches!(auth_mode, RequestAuthMode::Payg) {
+    if !policy.cache_aligner_enabled {
         tracing::info!(
             event = "e1_skipped",
             request_id = %request_id,
             path = "/v1/messages",
-            reason = "auth_mode",
+            reason = "policy",
             auth_mode = auth_mode.as_str(),
-            "tool-array sort skipped: non-PAYG auth mode passes through byte-equal"
+            cache_aligner_enabled = policy.cache_aligner_enabled,
+            "tool-array sort skipped: policy disabled cache aligner"
         );
         tracing::info!(
             event = "e2_skipped",
             request_id = %request_id,
             path = "/v1/messages",
-            reason = "auth_mode",
+            reason = "policy",
             auth_mode = auth_mode.as_str(),
-            "schema-key sort skipped: non-PAYG auth mode passes through byte-equal"
+            cache_aligner_enabled = policy.cache_aligner_enabled,
+            "schema-key sort skipped: policy disabled cache aligner"
         );
         return NormalizationApplied::default();
     }

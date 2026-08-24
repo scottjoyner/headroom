@@ -867,7 +867,6 @@ class RequestMetrics:
     model: str
     stream: bool
     mode: str  # audit | optimize | simulate
-
     # Token breakdown
     tokens_input_before: int
     tokens_input_after: int
@@ -883,6 +882,9 @@ class RequestMetrics:
     stable_prefix_hash: str = ""
     cache_alignment_score: float = 0.0
     cached_tokens: int | None = None  # From API response if available
+
+    # Lane / route metadata
+    provider_lane: str = "unknown"  # local | remote | unknown
 
     # Cache optimizer metrics (provider-specific)
     cache_optimizer_used: str | None = None  # e.g., "anthropic-cache-optimizer"

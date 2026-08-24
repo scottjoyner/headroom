@@ -22,6 +22,8 @@ from headroom.transforms.compression_policy import (
     cache_write_multiplier_for_ttl,
     policy_default_payg,
     policy_for_mode,
+    policy_telemetry_tags,
+    resolve_policy,
 )
 
 
@@ -49,6 +51,22 @@ class TestCompressionPolicyForMode:
         assert p.toin_read_only is False, (
             "PAYG keeps TOIN write-enabled — network effect feeds on PAYG traffic"
         )
+
+    def test_remote_lane_forces_live_zone_only(self):
+        p = resolve_policy(AuthMode.PAYG, provider_lane="remote")
+        assert p.live_zone_only is True, "Remote/SaaS providers should stay cache-first"
+        assert p.cache_aligner_enabled is True, "Remote lane keeps cache aligner enabled"
+
+    def test_policy_telemetry_tags_include_lane_and_flags(self):
+        p = resolve_policy(AuthMode.SUBSCRIPTION, provider_lane="remote")
+        tags = policy_telemetry_tags(p, auth_mode=AuthMode.SUBSCRIPTION, provider_lane="remote")
+        assert tags["compression_policy"] == "subscription"
+        assert tags["provider_lane"] == "remote"
+        assert tags["auth_mode"] == "subscription"
+        assert tags["policy_live_zone_only"] == "true"
+        assert tags["policy_cache_aligner_enabled"] == "false"
+        assert tags["policy_toin_read_only"] == "true"
+
 
     def test_oauth_matches_payg_today(self):
         # Canary: when F2.2-followup diverges OAuth from PAYG, this test

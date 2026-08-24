@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Iterator
 from datetime import datetime, timezone
 from typing import Any
@@ -579,6 +580,8 @@ class HeadroomClient:
             waste_signals=waste_signals.to_dict(),
             stable_prefix_hash=stable_prefix_hash,
             cache_alignment_score=cache_alignment_score,
+            cached_tokens=None,
+            provider_lane=os.environ.get("HEADROOM_UPSTREAM_LANE", "unknown"),
             transforms_applied=transforms_applied,
             messages_hash=compute_messages_hash(messages),
             # Cache optimizer metrics

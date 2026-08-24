@@ -29,6 +29,7 @@ def _entry(**overrides) -> RequestLog:
         "tags": {},
         "cache_hit": False,
         "transforms_applied": ["kompress:user:0.4"],
+        "provider_lane": "remote",
     }
     base.update(overrides)
     return RequestLog(**base)
@@ -49,6 +50,7 @@ def test_get_recent_strips_compressed_messages_alongside_request_and_response():
     assert "request_messages" not in recent[0]
     assert "compressed_messages" not in recent[0]
     assert "response_content" not in recent[0]
+    assert recent[0]["provider_lane"] == "remote"
 
 
 def test_get_recent_with_messages_returns_compressed_messages():
@@ -64,6 +66,7 @@ def test_get_recent_with_messages_returns_compressed_messages():
     assert len(recent) == 1
     assert recent[0]["request_messages"] == [{"role": "user", "content": "pre"}]
     assert recent[0]["compressed_messages"] == [{"role": "user", "content": "post"}]
+    assert recent[0]["provider_lane"] == "unknown"
 
 
 def test_jsonl_file_strips_both_sides_when_log_full_messages_disabled(tmp_path):
@@ -85,6 +88,7 @@ def test_jsonl_file_strips_both_sides_when_log_full_messages_disabled(tmp_path):
     assert "request_messages" not in obj
     assert "compressed_messages" not in obj
     assert "response_content" not in obj
+    assert obj["provider_lane"] == "remote"
 
 
 def test_get_memory_stats_accounts_for_compressed_messages():
