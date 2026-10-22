@@ -1,19 +1,3 @@
-<!-- repo-entrypoint-guide:start -->
-## Repository guide
-
-**First-time reader:** Start with [What it does](#what-it-does), [Get started](#get-started-60-seconds), and [Proof](#proof). Read reported token savings together with the dataset, measurement method, and compression/reconstruction limitations; benchmark on your own workloads.
-
-**Safety:** Compression proxies can process sensitive agent context. Review local/remote processing boundaries, logging, credential handling, and failure behavior before inserting the tool into production agent traffic.
-
-### Find your way
-
-- [What it does](#what-it-does)
-- [How it works (30 seconds)](#how-it-works-30-seconds)
-- [Get started (60 seconds)](#get-started-60-seconds)
-- [Proof](#proof)
-- [Install](#install)
-<!-- repo-entrypoint-guide:end -->
-
 <div align="center"><pre>
   ██╗  ██╗███████╗ █████╗ ██████╗ ██████╗  ██████╗  ██████╗ ███╗   ███╗
   ██║  ██║██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔═══██╗██╔═══██╗████╗ ████║
@@ -60,6 +44,23 @@ Headroom compresses everything your AI agent reads — tool outputs, logs, RAG c
   <img src="HeadroomDemo-Fast.gif" alt="Headroom in action" width="820">
   <br/><sub>Live: 10,144 → 1,260 tokens — same FATAL found.</sub>
 </p>
+
+
+<!-- repo-entrypoint-guide:start -->
+## Repository guide
+
+**First-time reader:** Start with [What it does](#what-it-does), [Get started](#get-started-60-seconds), and [Proof](#proof). Read reported token savings together with the dataset, measurement method, and compression/reconstruction limitations; benchmark on your own workloads.
+
+**Safety:** Compression proxies can process sensitive agent context. Review local/remote processing boundaries, logging, credential handling, and failure behavior before inserting the tool into production agent traffic.
+
+### Find your way
+
+- [What it does](#what-it-does)
+- [How it works (30 seconds)](#how-it-works-30-seconds)
+- [Get started (60 seconds)](#get-started-60-seconds)
+- [Proof](#proof)
+- [Install](#install)
+<!-- repo-entrypoint-guide:end -->
 
 ## What it does
 
