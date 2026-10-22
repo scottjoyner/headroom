@@ -1,3 +1,9 @@
+<!-- repo-entrypoint-guide:start -->
+> **First-time reader:** Start with [What it does](#what-it-does), [Get started](#get-started-60-seconds), and [Proof](#proof). Read reported token savings together with the dataset, measurement method, and compression/reconstruction limitations; benchmark on your own workloads.
+> 
+> **Safety:** Compression proxies can process sensitive agent context. Review local/remote processing boundaries, logging, credential handling, and failure behavior before inserting the tool into production agent traffic.
+<!-- repo-entrypoint-guide:end -->
+
 <div align="center"><pre>
   ██╗  ██╗███████╗ █████╗ ██████╗ ██████╗  ██████╗  ██████╗ ███╗   ███╗
   ██║  ██║██╔════╝██╔══██╗██╔══██╗██╔══██╗██╔═══██╗██╔═══██╗████╗ ████║
